@@ -31,7 +31,10 @@ const app = express();
 app.set('trust proxy', 1);
 
 function normalizeOrigin(o) {
-  return String(o || '').trim().replace(/\/+$/, '');
+  return String(o || '')
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\/+$/, '');
 }
 
 const defaultOrigins = [
