@@ -20,7 +20,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/auth/google" element={<GoogleAuthCallback />} />
+            <Route path="/auth/google/*" element={<GoogleAuthCallback />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
