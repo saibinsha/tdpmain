@@ -101,6 +101,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/blogs', blogRoutes);
