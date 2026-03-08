@@ -90,6 +90,7 @@ interface AppContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   adminLogin: (email: string, password: string) => Promise<void>;
   logout: () => void;
   updateProfile: (patch: Partial<Pick<User, 'name' | 'phone' | 'profilePicture' | 'district' | 'constituency' | 'address'>>) => Promise<void>;
@@ -569,6 +570,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    const res = await api.request<{
+      ok: true;
+      user: any;
+      tokens: { accessToken: string; refreshToken: string };
+    }>('/api/auth/register', 'POST', { name, email, password });
+
+    api.setStoredTokens(res.tokens);
+    const backendUser = res.user;
+    const normalized: User = {
+      id: backendUser.id || backendUser._id,
+      membershipId: backendUser.membershipId,
+      name: backendUser.name,
+      email: backendUser.email,
+      role: backendUser.role,
+      avatar: (backendUser.name || 'U').slice(0, 2).toUpperCase(),
+      phone: backendUser.phone,
+      profilePicture: backendUser.profilePicture,
+      district: backendUser.district,
+      constituency: backendUser.constituency,
+      address: backendUser.address,
+      joinedDate: backendUser.createdAt,
+    };
+
+    setUser(normalized);
+    setIsAuthenticated(true);
+    localStorage.setItem('tdp_user', JSON.stringify(normalized));
+    setShowLoginModal(false);
+
+    try {
+      const t = localStorage.getItem('tdp_fcm_token');
+      if (t) await api.saveFcmToken({ userId: normalized.id, fcmToken: t });
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const adminLogin = useCallback(async (email: string, password: string) => {
     const res = await api.request<{
       ok: true;
@@ -681,13 +719,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      sidebarOpen, toggleSidebar, currentPage, setCurrentPage,
-      user, isAuthenticated, login, adminLogin, logout, updateProfile,
-      blogs, addBlog, likeBlog, addComment, deleteBlog,
-      polls, votePoll, works, addWork, updateWorkStatus, deleteWork,
-      chatRooms, activeChatRoom, setActiveChatRoom, sendMessage,
-      dmTargetUserId, setDmTargetUserId,
-      notifications, clearNotifications, showLoginModal, setShowLoginModal, loginMode, setLoginMode
+      sidebarOpen,
+      toggleSidebar,
+      currentPage,
+      setCurrentPage,
+      user,
+      isAuthenticated,
+      login,
+      register,
+      adminLogin,
+      logout,
+      updateProfile,
+      blogs,
+      addBlog,
+      likeBlog,
+      addComment,
+      deleteBlog,
+      polls,
+      votePoll,
+      works,
+      addWork,
+      updateWorkStatus,
+      deleteWork,
+      chatRooms,
+      activeChatRoom,
+      setActiveChatRoom,
+      sendMessage,
+      dmTargetUserId,
+      setDmTargetUserId,
+      notifications,
+      clearNotifications,
+      showLoginModal,
+      setShowLoginModal,
+      loginMode,
+      setLoginMode
     }}>
       {children}
     </AppContext.Provider>

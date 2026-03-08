@@ -48,6 +48,45 @@ const googleCallback = (req, res, next) => {
   })(req, res, next);
 };
 
+const registerLocal = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) throw new AppError('Name, email and password are required', 400);
+  if (String(password).length < 6) throw new AppError('Password must be at least 6 characters', 400);
+
+  const emailNorm = String(email).toLowerCase().trim();
+  const existing = await User.findOne({ email: emailNorm });
+  if (existing) throw new AppError('Email already registered', 409);
+
+  const passwordHash = await bcrypt.hash(String(password), 12);
+  const user = await User.create({
+    name: String(name).trim(),
+    email: emailNorm,
+    phone: '',
+    role: 'user',
+    status: 'active',
+    authProvider: 'local',
+    passwordHash,
+  });
+
+  const { accessToken, refreshToken } = issueTokens(user);
+  await setRefreshToken(user._id, refreshToken);
+
+  res.status(201).json({
+    ok: true,
+    user: {
+      id: user._id,
+      membershipId: user.membershipId,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      profilePicture: user.profilePicture,
+      role: user.role,
+      status: user.status,
+    },
+    tokens: { accessToken, refreshToken },
+  });
+});
+
 const loginLocal = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) throw new AppError('Email and password are required', 400);
@@ -120,6 +159,7 @@ const logout = asyncHandler(async (req, res) => {
 module.exports = {
   googleStart,
   googleCallback,
+  registerLocal,
   loginLocal,
   refresh,
   logout,

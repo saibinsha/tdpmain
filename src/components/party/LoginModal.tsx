@@ -4,9 +4,12 @@ import { X, Mail, Lock, Eye, EyeOff, Shield, User } from 'lucide-react';
 import { api } from '@/lib/api';
 
 const LoginModal: React.FC = () => {
-  const { showLoginModal, setShowLoginModal, login, adminLogin, loginMode, setLoginMode } = useAppContext();
+  const { showLoginModal, setShowLoginModal, login, register, adminLogin, loginMode, setLoginMode } = useAppContext();
+  const [authView, setAuthView] = useState<'login' | 'register'>('login');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,19 +19,45 @@ const LoginModal: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
+
+    if (loginMode === 'admin') {
+      if (!email || !password) {
+        setError('Please fill in all fields');
+        return;
+      }
+    } else {
+      if (authView === 'register') {
+        if (!name || !email || !password || !confirmPassword) {
+          setError('Please fill in all fields');
+          return;
+        }
+        if (password !== confirmPassword) {
+          setError('Passwords do not match');
+          return;
+        }
+      } else {
+        if (!email || !password) {
+          setError('Please fill in all fields');
+          return;
+        }
+      }
     }
+
     setLoading(true);
     try {
       if (loginMode === 'admin') {
         await adminLogin(email, password);
       } else {
-        await login(email, password);
+        if (authView === 'register') {
+          await register(name, email, password);
+        } else {
+          await login(email, password);
+        }
       }
+      setName('');
       setEmail('');
       setPassword('');
+      setConfirmPassword('');
     } catch (e: any) {
       setError(e?.message || 'Login failed');
     } finally {
@@ -74,11 +103,15 @@ const LoginModal: React.FC = () => {
             {loginMode === 'admin' ? 'Admin Portal' : 'Welcome Back'}
           </h2>
           <p className="text-sm text-center text-gray-500 mb-6">
-            {loginMode === 'admin' ? 'Secure admin access' : 'Sign in to your account'}
+            {loginMode === 'admin'
+              ? 'Secure admin access'
+              : authView === 'register'
+                ? 'Create your account'
+                : 'Sign in to your account'}
           </p>
 
           {/* Google OAuth - only for user */}
-          {loginMode === 'user' && (
+          {loginMode === 'user' && authView === 'login' && (
             <>
               <button
                 onClick={handleGoogleLogin}
@@ -109,9 +142,25 @@ const LoginModal: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {loginMode === 'user' && authView === 'register' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                {loginMode === 'admin' ? 'Admin Email' : 'Username / Email'}
+                {loginMode === 'admin' ? 'Admin Email' : 'Gmail / Email'}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -119,7 +168,7 @@ const LoginModal: React.FC = () => {
                   type="text"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder={loginMode === 'admin' ? 'admin@tdpparty.org' : 'Enter username or email'}
+                  placeholder={loginMode === 'admin' ? 'admin@tdpparty.org' : 'Enter gmail or email'}
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
               </div>
@@ -146,6 +195,29 @@ const LoginModal: React.FC = () => {
               </div>
             </div>
 
+            {loginMode === 'user' && authView === 'register' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                    className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -164,10 +236,31 @@ const LoginModal: React.FC = () => {
                   Processing...
                 </span>
               ) : (
-                loginMode === 'admin' ? 'Admin Sign In' : 'Sign In'
+                loginMode === 'admin' ? 'Admin Sign In' : authView === 'register' ? 'Register' : 'Sign In'
               )}
             </button>
           </form>
+
+          {loginMode === 'user' && (
+            <div className="mt-5 text-center">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  const next = authView === 'login' ? 'register' : 'login';
+                  setAuthView(next);
+                  setError('');
+                  setName('');
+                  setEmail('');
+                  setPassword('');
+                  setConfirmPassword('');
+                }}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {authView === 'login' ? "Don't have an account? Register" : 'Already have an account? Sign In'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
