@@ -28,7 +28,7 @@ const googleCallback = (req, res, next) => {
       const { accessToken, refreshToken } = issueTokens(user);
       await setRefreshToken(user._id, refreshToken);
 
-      return res.json({
+      const payload = {
         ok: true,
         user: {
           id: user._id,
@@ -41,7 +41,20 @@ const googleCallback = (req, res, next) => {
           status: user.status,
         },
         tokens: { accessToken, refreshToken },
-      });
+      };
+
+      const frontendBase =
+        process.env.FRONTEND_URL ||
+        process.env.PUBLIC_FRONTEND_URL ||
+        process.env.FULL_FRONTEND_URL;
+
+      if (frontendBase) {
+        const redirectUrl = new URL('/auth/google', String(frontendBase));
+        redirectUrl.searchParams.set('payload', Buffer.from(JSON.stringify(payload)).toString('base64'));
+        return res.redirect(302, redirectUrl.toString());
+      }
+
+      return res.json(payload);
     } catch (e) {
       return next(e);
     }
