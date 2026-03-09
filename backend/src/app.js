@@ -39,6 +39,7 @@ function normalizeOrigin(o) {
 
 const defaultOrigins = [
   'https://telugudeshamparty.onrender.com',
+  'https://tdp2-frontend.onrender.com',
   'http://localhost:3000',
   'http://localhost:4173',
   'http://localhost:5000',

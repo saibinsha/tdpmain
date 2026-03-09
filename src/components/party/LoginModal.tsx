@@ -66,7 +66,24 @@ const LoginModal: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${api.API_BASE}/api/auth/google`;
+    setError('');
+    setLoading(true);
+    Promise.resolve()
+      .then(async () => {
+        if (api.hasNativeGoogleBridge()) {
+          await api.nativeGoogleLogin();
+          setShowLoginModal(false);
+          window.location.reload();
+          return;
+        }
+        window.location.href = `${api.API_BASE}/api/auth/google`;
+      })
+      .catch((e: any) => {
+        setError(e?.message || 'Google login failed');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   return (

@@ -4,12 +4,90 @@ const { asyncHandler } = require('../utils/asyncHandler');
 const { AppError } = require('../utils/AppError');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const User = require('../models/User');
+const { OAuth2Client } = require('google-auth-library');
+
+const googleOAuthClient = new OAuth2Client();
 
 function issueTokens(user) {
   const accessToken = signAccessToken({ sub: String(user._id), role: user.role });
   const refreshToken = signRefreshToken({ sub: String(user._id), role: user.role });
   return { accessToken, refreshToken };
 }
+
+const googleNative = asyncHandler(async (req, res) => {
+  const { idToken } = req.body || {};
+  if (!idToken) throw new AppError('idToken is required', 400);
+
+  const audience =
+    process.env.GOOGLE_WEB_CLIENT_ID ||
+    process.env.WEB_OAUTH_CLIENT_ID ||
+    process.env.GOOGLE_CLIENT_ID;
+
+  if (!audience) {
+    throw new AppError('Google audience (GOOGLE_WEB_CLIENT_ID) is not configured', 500);
+  }
+
+  let ticket;
+  try {
+    ticket = await googleOAuthClient.verifyIdToken({
+      idToken: String(idToken),
+      audience: String(audience),
+    });
+  } catch (e) {
+    throw new AppError('Invalid Google token', 401);
+  }
+
+  const payload = ticket.getPayload();
+  const email = payload && payload.email;
+  const emailVerified = payload && payload.email_verified;
+
+  if (!email) throw new AppError('Google token missing email', 401);
+  if (emailVerified === false) throw new AppError('Google email not verified', 401);
+
+  const normalizedEmail = String(email).toLowerCase();
+  const googleId = payload && payload.sub;
+  const name = (payload && payload.name) || 'User';
+  const picture = (payload && payload.picture) || '';
+
+  let user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    user = await User.create({
+      name,
+      email: normalizedEmail,
+      phone: '',
+      profilePicture: picture,
+      authProvider: 'google',
+      googleId: googleId || undefined,
+      role: 'user',
+      status: 'active',
+    });
+  } else {
+    if (user.status === 'blocked') throw new AppError('Account blocked', 403);
+
+    if (!user.googleId && googleId) user.googleId = googleId;
+    if (!user.profilePicture && picture) user.profilePicture = picture;
+    if (user.authProvider !== 'google') user.authProvider = 'google';
+    await user.save();
+  }
+
+  const { accessToken, refreshToken } = issueTokens(user);
+  await setRefreshToken(user._id, refreshToken);
+
+  res.json({
+    ok: true,
+    user: {
+      id: user._id,
+      membershipId: user.membershipId,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      profilePicture: user.profilePicture,
+      role: user.role,
+      status: user.status,
+    },
+    tokens: { accessToken, refreshToken },
+  });
+});
 
 async function setRefreshToken(userId, refreshToken) {
   const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
@@ -172,6 +250,7 @@ const logout = asyncHandler(async (req, res) => {
 module.exports = {
   googleStart,
   googleCallback,
+  googleNative,
   registerLocal,
   loginLocal,
   refresh,

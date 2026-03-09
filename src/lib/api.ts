@@ -5,6 +5,14 @@ type ApiError = {
   message: string;
 };
 
+declare global {
+  interface Window {
+    Android?: { googleSignIn?: () => void };
+    onNativeGoogleSignIn?: (idToken: string) => void;
+    onNativeGoogleSignInError?: (message: string) => void;
+  }
+}
+
 function getDefaultApiBase() {
   try {
     const host = window?.location?.hostname;
@@ -36,6 +44,80 @@ function setStoredTokens(tokens: { accessToken: string; refreshToken: string } |
     return;
   }
   localStorage.setItem('tdp_tokens', JSON.stringify(tokens));
+}
+
+function hasNativeGoogleBridge() {
+  try {
+    return typeof window !== 'undefined' && !!window.Android?.googleSignIn;
+  } catch {
+    return false;
+  }
+}
+
+async function nativeGoogleLogin(timeoutMs: number = 60_000): Promise<{
+  ok: true;
+  user: any;
+  tokens: { accessToken: string; refreshToken: string };
+}> {
+  if (!hasNativeGoogleBridge()) {
+    throw { status: 400, message: 'Native Google bridge not available' } as ApiError;
+  }
+
+  const idToken = await new Promise<string>((resolve, reject) => {
+    const prevOk = window.onNativeGoogleSignIn;
+    const prevErr = window.onNativeGoogleSignInError;
+
+    let done = false;
+    const cleanup = () => {
+      window.onNativeGoogleSignIn = prevOk;
+      window.onNativeGoogleSignInError = prevErr;
+    };
+
+    const timer = window.setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject({ status: 408, message: 'Google sign-in timed out' } as ApiError);
+    }, timeoutMs);
+
+    window.onNativeGoogleSignIn = (token: string) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      cleanup();
+      resolve(String(token || ''));
+    };
+
+    window.onNativeGoogleSignInError = (message: string) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      cleanup();
+      reject({ status: 401, message: String(message || 'Google sign-in failed') } as ApiError);
+    };
+
+    try {
+      window.Android!.googleSignIn!();
+    } catch {
+      window.clearTimeout(timer);
+      cleanup();
+      reject({ status: 500, message: 'Failed to start Google sign-in' } as ApiError);
+    }
+  });
+
+  if (!idToken || !idToken.trim()) {
+    throw { status: 401, message: 'Missing Google idToken' } as ApiError;
+  }
+
+  const data = await request<{
+    ok: true;
+    user: any;
+    tokens: { accessToken: string; refreshToken: string };
+  }>('/api/auth/google/native', 'POST', { idToken });
+
+  setStoredTokens(data.tokens);
+  localStorage.setItem('tdp_user', JSON.stringify(data.user));
+  return data;
 }
 
 async function request<T>(path: string, method: HttpMethod, body?: any, token?: string): Promise<T> {
@@ -170,6 +252,8 @@ export const api = {
   API_BASE,
   getStoredTokens,
   setStoredTokens,
+  hasNativeGoogleBridge,
+  nativeGoogleLogin,
   request,
   authedRequest,
   uploadSingle,
