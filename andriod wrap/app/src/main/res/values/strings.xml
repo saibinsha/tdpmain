@@ -1,4 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">tdp</string>
-    <string name="default_web_client_id"></string>
+    <!-- Use the ID from your google-services.json for better reliability -->
+    <string name="default_web_client_id">941620869591-9ckbl2b83fguncd8t98cvpqspkisni98.apps.googleusercontent.com</string>
+
+    <!-- Replace this with your ACTUAL Web Client ID -->
+    <!-- <string name="default_web_client_id">YOUR_REAL_ID_HERE.apps.googleusercontent.com</string> -->
 </resources>
