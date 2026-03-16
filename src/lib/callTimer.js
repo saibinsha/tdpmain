@@ -62,17 +62,38 @@ class CallTimer {
     
     const duration = this.getFormattedDuration();
     
-    // Update timer display elements
-    const timerElements = document.querySelectorAll('.call-timer, .call-duration, [data-call-timer]');
-    timerElements.forEach(element => {
-      element.textContent = duration;
+    // Update timer display elements - more comprehensive selector
+    const timerSelectors = [
+      '.call-timer', 
+      '.call-duration', 
+      '[data-call-timer]',
+      '.timer',
+      '.duration',
+      '[class*="timer"]',
+      '[class*="duration"]',
+      '.call-time',
+      '.call-length',
+      '[data-timer]',
+      '.time-display'
+    ];
+    
+    timerSelectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        if (element && element.textContent !== undefined) {
+          element.textContent = duration;
+        }
+      });
     });
     
-    // Also update any elements with class containing 'timer'
-    const timerElements2 = document.querySelectorAll('[class*="timer"], [class*="duration"]');
-    timerElements2.forEach(element => {
-      if (element.textContent.includes(':') || element.textContent.includes('00:00')) {
-        element.textContent = duration;
+    // Also update any elements containing time-related text
+    const allElements = document.querySelectorAll('*');
+    allElements.forEach(element => {
+      if (element.children.length === 0 && element.textContent) {
+        const text = element.textContent;
+        if (text.includes(':') && (text.includes('00:00') || text.includes('00:'))) {
+          element.textContent = duration;
+        }
       }
     });
   }
@@ -94,8 +115,9 @@ class CallTimer {
     const url = window.location.href;
     const hasVideoElement = document.querySelector('video') !== null;
     const hasVideoButton = document.querySelector('[class*="video"], [data-video]') !== null;
+    const hasVideoContainer = document.querySelector('[class*="video-container"], [class*="video-call"]') !== null;
     
-    return url.includes('video') || hasVideoElement || hasVideoButton;
+    return url.includes('video') || hasVideoElement || hasVideoButton || hasVideoContainer;
   }
 
   toggleSpeakerphone() {
@@ -128,7 +150,9 @@ class CallTimer {
         const hasCallStart = addedNodes.some(node => {
           if (node.nodeType === Node.ELEMENT_NODE) {
             return node.matches('.call-active, [class*="calling"], [data-call-active]') ||
-                   node.querySelector('.call-active, [class*="calling"], [data-call-active]');
+                   node.querySelector('.call-active, [class*="calling"], [data-call-active]') ||
+                   node.matches('[class*="call-connected"], [data-call-connected]') ||
+                   node.querySelector('[class*="call-connected"], [data-call-connected]');
           }
           return false;
         });
@@ -136,7 +160,9 @@ class CallTimer {
         const hasCallEnd = addedNodes.some(node => {
           if (node.nodeType === Node.ELEMENT_NODE) {
             return node.matches('.call-ended, [class*="end-call"], [data-call-ended]') ||
-                   node.querySelector('.call-ended, [class*="end-call"], [data-call-ended]');
+                   node.querySelector('.call-ended, [class*="end-call"], [data-call-ended]') ||
+                   node.matches('[class*="call-disconnected"], [data-call-disconnected]') ||
+                   node.querySelector('[class*="call-disconnected"], [data-call-disconnected]');
           }
           return false;
         });
@@ -161,6 +187,33 @@ class CallTimer {
     return timer;
   }
 }
+
+// Handle external login from Android custom URL scheme
+function handleExternalLogin(data) {
+  console.log('External login received:', data);
+  
+  if (data.token) {
+    // Store the token
+    localStorage.setItem('tdp_tokens', JSON.stringify({
+      accessToken: data.token,
+      refreshToken: data.token
+    }));
+    
+    if (data.email) {
+      localStorage.setItem('tdp_user', JSON.stringify({
+        id: data.email,
+        email: data.email,
+        name: data.name || data.email
+      }));
+    }
+    
+    // Reload the page to apply login
+    window.location.reload();
+  }
+}
+
+// Make the function globally available
+window.handleExternalLogin = handleExternalLogin;
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

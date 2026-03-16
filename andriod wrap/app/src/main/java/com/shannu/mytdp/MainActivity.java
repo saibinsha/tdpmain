@@ -54,6 +54,49 @@ public class MainActivity extends AppCompatActivity {
     private GoogleSignInClient googleSignInClient;
 
     private String pendingPushJson = null;
+    private String loginToken = null;
+
+    private void handleIntentData(Intent intent) {
+        if (intent == null) return;
+        
+        Uri data = intent.getData();
+        if (data != null && data.getScheme() != null && data.getScheme().equals("mytdp")) {
+            // Handle login success from external browser
+            String token = data.getQueryParameter("token");
+            String email = data.getQueryParameter("email");
+            String name = data.getQueryParameter("name");
+            
+            Log.i(TAG, "Received login callback from external browser");
+            Log.d(TAG, "Token: " + (token != null ? "present" : "missing"));
+            
+            if (token != null && !token.trim().isEmpty()) {
+                loginToken = token;
+                // Send login data to WebView after it loads
+                sendLoginDataToWebView(token, email, name);
+            }
+        }
+    }
+    
+    private void sendLoginDataToWebView(String token, String email, String name) {
+        if (webView == null) {
+            loginToken = token; // Store for later when WebView is ready
+            return;
+        }
+        
+        String js = "(function(){" +
+            "try{" +
+            "if(window.handleExternalLogin){" +
+            "window.handleExternalLogin({" +
+            "token:'" + escapeJs(token) + "'," +
+            "email:'" + escapeJs(email != null ? email : "") + "'," +
+            "name:'" + escapeJs(name != null ? name : "") + "'" +
+            "});" +
+            "}" +
+            "}catch(e){console.error('Login callback error:', e);}" +
+            "})();";
+        
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
 
     private void checkAndRequestPermissions() {
         List<String> permissionsNeeded = new ArrayList<>();
@@ -166,7 +209,18 @@ public class MainActivity extends AppCompatActivity {
     private class WebAppBridge {
         @JavascriptInterface
         public void googleSignIn() {
-            runOnUiThread(MainActivity.this::startGoogleSignIn);
+            // Open Google Sign-In in external browser
+            runOnUiThread(() -> {
+                try {
+                    String googleSignInUrl = "https://telugudeshamparty.onrender.com/api/auth/google";
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(googleSignInUrl));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                    Log.i(TAG, "Opening Google Sign-In in external browser");
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to open browser for Google Sign-In", e);
+                }
+            });
         }
 
         @JavascriptInterface
@@ -288,6 +342,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         try {
+            // Check if app was opened from custom URL scheme (after Google login)
+            handleIntentData(getIntent());
+            
             capturePushFromIntent(getIntent());
 
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -352,43 +409,6 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                    return false;
-                }
-
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    super.onPageFinished(view, url);
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        CookieManager.getInstance().flush();
-                    }
-
-                    try {
-                        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
-                            if (!task.isSuccessful()) return;
-                            String token = task.getResult();
-                            if (token == null || token.trim().isEmpty()) return;
-
-                            String safe = token.replace("'", "\\'");
-                            webView.evaluateJavascript("window.setFcmToken('" + safe + "')", null);
-                        });
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error getting FCM token", e);
-                    }
-
-                    if (pendingPushJson != null) {
-                        String js = "(function(){try{if(window.handlePushOpen){window.handlePushOpen(" + pendingPushJson + ");}}catch(e){}})();";
-                        webView.evaluateJavascript(js, null);
-                        pendingPushJson = null;
-                    }
-                }
-            });
-
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    runOnUiThread(() -> {
                         try {
                             String[] resources = request.getResources();
                             request.grant(resources);
@@ -417,18 +437,38 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                    MainActivity.this.filePathCallback = filePathCallback;
-                    Intent intent = fileChooserParams.createIntent();
-                    try {
-                        startActivityForResult(intent, FILECHOOSER_RESULTCODE);
-                    } catch (Exception e) {
-                        MainActivity.this.filePathCallback = null;
-                        return false;
-                    }
-                    return true;
+                public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    CookieManager.getInstance().flush();
                 }
-            });
+
+                try {
+                    FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+                        if (!task.isSuccessful()) return;
+                        String token = task.getResult();
+                        if (token == null || token.trim().isEmpty()) return;
+
+                        String safe = token.replace("'", "\\'");
+                        webView.evaluateJavascript("window.setFcmToken('" + safe + "')", null);
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "Error getting FCM token", e);
+                }
+
+                // Send pending login data if WebView is ready
+                if (loginToken != null) {
+                    sendLoginDataToWebView(loginToken, null, null);
+                    loginToken = null;
+                }
+
+                if (pendingPushJson != null) {
+                    String js = "(function(){try{if(window.handlePushOpen){window.handlePushOpen(" + pendingPushJson + ");}}catch(e){}})();";
+                    webView.evaluateJavascript(js, null);
+                    pendingPushJson = null;
+                }
+            }
 
             webView.loadUrl("https://telugudeshamparty.onrender.com/");
         } catch (Exception e) {
@@ -440,6 +480,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        handleIntentData(intent);
         capturePushFromIntent(intent);
         if (webView != null) {
             webView.post(() -> {
