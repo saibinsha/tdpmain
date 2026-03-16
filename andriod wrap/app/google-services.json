@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "386414628105",
+    "project_id": "tdp2-4d674",
+    "storage_bucket": "tdp2-4d674.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:386414628105:android:d2ced0e7b2edf34f0157d8",
+        "android_client_info": {
+          "package_name": "com.shannu.mytdp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUABl1OIn8ZE81lT9BpESzrbazmxHsXd4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
