@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,6 +21,8 @@ import android.webkit.WebViewClient;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import androidx.browser.customtabs.CustomTabsIntent;
 
@@ -37,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private static final int FILECHOOSER_RESULTCODE = 1;
+    private static final int CAMERA_MIC_PERMISSION_REQUEST_CODE = 1003;
 
     private static final int GOOGLE_SIGN_IN_REQUEST_CODE = 9001;
     private GoogleSignInClient googleSignInClient;
@@ -192,6 +196,18 @@ public class MainActivity extends AppCompatActivity {
             }, 1002);
         }
 
+        // ✅ Check and request camera/mic permissions for WebRTC
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            
+            ActivityCompat.requestPermissions(this, 
+                new String[]{
+                    Manifest.permission.CAMERA, 
+                    Manifest.permission.RECORD_AUDIO
+                }, 
+                CAMERA_MIC_PERMISSION_REQUEST_CODE);
+        }
+
         webView = findViewById(R.id.webview);
 
         WebSettings settings = webView.getSettings();
@@ -283,25 +299,16 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    runOnUiThread(() -> {
+                // This grants the website's request for camera/mic access
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
                         try {
-                            // Grant all permissions for WebRTC to work properly
-                            String[] resources = request.getResources();
-                            for (String resource : resources) {
-                                if (resource.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE) ||
-                                    resource.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
-                                    resource.equals(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID)) {
-                                    // Grant WebRTC permissions
-                                    request.grant(request.getResources());
-                                    return;
-                                }
-                            }
                             request.grant(request.getResources());
                         } catch (Exception ignored) {
                         }
-                    });
-                }
+                    }
+                });
             }
 
             @Override
